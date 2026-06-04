@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stable Diffusion Architecture</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --card-bg: #16213e;
+            --accent: #0f3460;
+            --highlight: #e94560;
+            --text: #eaeaea;
+            --text-dim: #a0a0b0;
+            --clip: #7209b7;
+            --unet: #3a86ff;
+            --vae-enc: #06d6a0;
+            --vae-dec: #06d6a0;
+            --latent: #f72585;
+            --noise: #4361ee;
+            --cfg: #f4a261;
+            --scheduler: #e76f51;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 0.3rem;
+            color: var(--highlight);
+        }
+
+        h2 {
+            font-size: 1.4rem;
+            margin: 2.5rem 0 1rem;
+            padding-bottom: 0.3rem;
+            border-bottom: 2px solid var(--accent);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-dim);
+            margin-bottom: 2.5rem;
+            font-size: 0.95rem;
+        }
+
+        /* Main pipeline diagram */
+        .pipeline {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.8rem;
+            margin: 2rem auto;
+            max-width: 850px;
+        }
+
+        .pipeline-row {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .component {
+            border-radius: 10px;
+            padding: 1rem 1.5rem;
+            text-align: center;
+            min-width: 140px;
+            position: relative;
+        }
+
+        .component-label {
+            font-weight: 700;
+            font-size: 0.95rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .component-detail {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.7);
+        }
+
+        .component.clip { background: var(--clip); }
+        .component.unet { background: var(--unet); color: #1a1a2e; }
+        .component.vae-enc { background: var(--vae-enc); color: #1a1a2e; }
+        .component.vae-dec { background: var(--vae-dec); color: #1a1a2e; }
+        .component.noise { background: var(--noise); }
+        .component.scheduler { background: var(--scheduler); color: #1a1a2e; }
+        .component.cfg { background: var(--cfg); color: #1a1a2e; }
+
+        .big-arrow {
+            font-size: 1.8rem;
+            color: var(--text-dim);
+        }
+
+        .connector-v {
+            width: 2px;
+            height: 25px;
+            background: var(--text-dim);
+        }
+
+        .connector-v-long {
+            width: 2px;
+            height: 40px;
+            background: var(--text-dim);
+        }
+
+        /* Loop indicator */
+        .loop-box {
+            border: 2px dashed var(--scheduler);
+            border-radius: 12px;
+            padding: 1.5rem;
+            max-width: 750px;
+            width: 100%;
+            position: relative;
+        }
+
+        .loop-label {
+            position: absolute;
+            top: -12px;
+            left: 20px;
+            background: var(--bg);
+            padding: 0 0.5rem;
+            font-size: 0.8rem;
+            color: var(--scheduler);
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        /* Info boxes */
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        @media (max-width: 800px) {
+            .info-grid { grid-template-columns: 1fr; }
+        }
+
+        .info-card {
+            background: var(--card-bg);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 1.2rem;
+        }
+
+        .info-card h3 {
+            font-size: 1rem;
+            margin-bottom: 0.6rem;
+        }
+
+        .info-card p, .info-card li {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            line-height: 1.7;
+        }
+
+        .info-card ul {
+            padding-left: 1.2rem;
+        }
+
+        .formula {
+            background: rgba(255,255,255,0.05);
+            padding: 0.8rem 1rem;
+            border-radius: 6px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+            margin: 0.8rem 0;
+            border-left: 3px solid var(--highlight);
+            overflow-x: auto;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            vertical-align: middle;
+        }
+
+        .badge.clip-b { background: var(--clip); }
+        .badge.unet-b { background: var(--unet); color: #1a1a2e; }
+        .badge.vae-b { background: var(--vae-enc); color: #1a1a2e; }
+        .badge.sched-b { background: var(--scheduler); color: #1a1a2e; }
+        .badge.cfg-b { background: var(--cfg); color: #1a1a2e; }
+
+        /* Comparison table */
+        .cmp-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+        }
+
+        .cmp-table th, .cmp-table td {
+            padding: 0.6rem 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid var(--accent);
+        }
+
+        .cmp-table th {
+            color: var(--highlight);
+            font-weight: 600;
+        }
+
+        .section-intro {
+            max-width: 750px;
+            margin: 0 auto 1.5rem;
+            font-size: 0.9rem;
+            color: var(--text-dim);
+        }
+
+        .highlight-box {
+            background: var(--card-bg);
+            border-left: 4px solid var(--highlight);
+            padding: 1rem 1.2rem;
+            border-radius: 0 8px 8px 0;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+
+        .flow-diagram {
+            font-family: 'Consolas', monospace;
+            font-size: 0.8rem;
+            background: rgba(0,0,0,0.3);
+            padding: 1.2rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            white-space: pre;
+            line-height: 1.5;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Stable Diffusion 1.5 — Architecture Overview</h1>
+<p class="subtitle">High-Resolution Image Synthesis With Latent Diffusion Models
+ (Rombach et al., CVPR 2022) — diffusion in compressed latent space</p>
+
+<!-- ============================================================ -->
+<h2>High-Level Pipeline</h2>
+
+<p class="section-intro">
+    TInstead of running diffusion on full 512×512 pixel images
+    compress to a small 64×64 latent space, do all the noising/denoising there, then decode back to pixels.
+</p>
+    <!-- Two parallel input paths side by side -->
+    <div class="pipeline-row" style="gap:2rem; align-items:flex-start;">
+
+        <!-- Left: VAE Encoder (training only) → Add noise -->
+        <div style="display:flex; flex-direction:column; align-items:center;">
+            <div class="component" style="background:#6c757d; opacity:0.85; border:2px dashed #a0a0b0; position:relative;">
+                <div style="position:absolute; top:-10px; right:10px; background:var(--bg); padding:0 0.4rem; font-size:0.65rem; color:#a0a0b0; font-weight:bold; letter-spacing:1px;">TRAINING</div>
+                <div class="component-label">VAE Encoder</div>
+                <div class="component-detail">512×512×3 image → z₀ (64×64×4)</div>
+            </div>
+            <div class="connector-v" style="background:#6c757d;"></div>
+            <div class="component" style="background:#6c757d; opacity:0.85; border:2px dashed #a0a0b0; min-width:130px;">
+                <div class="component-label" style="font-size:0.85rem;">Add noise</div>
+                <div class="component-detail">z<sub>t</sub> = √ᾱ<sub>t</sub>·z₀ + √(1-ᾱ<sub>t</sub>)·ε</div>
+            </div>
+        </div>
+
+        <!-- Center: OR label -->
+        <div style="align-self:center; font-size:1.1rem; color:var(--text-dim); font-weight:bold; padding-top:2rem;">OR</div>
+
+        <!-- Right: Random noise (inference only) -->
+        <div style="display:flex; flex-direction:column; align-items:center; padding-top:1.5rem;">
+            <div class="component noise" style="min-width:130px; padding:0.8rem 1rem;">
+                                <div style="position:absolute; top:-10px; right:10px; background:var(--bg); padding:0 0.4rem; font-size:0.65rem; color:#a0a0b0; font-weight:bold; letter-spacing:1px;">INFERENCE</div>
+
+                <div class="component-label" style="font-size:0.85rem;">z<sub>T</sub> ~ N(0,I)</div>
+                <div class="component-detail">64×64×4 pure noise</div>
+            </div>
+        </div>
+
+    </div>
+<div class="pipeline">
+
+
+
+    <!-- Main U-Net block with CLIP entering from the side -->
+    <div class="loop-box">
+        <span class="loop-label">U-NET DENOISING (loop at inference, single step at training)</span>
+
+        <div class="pipeline-row" style="margin-bottom:1rem;">
+            <div class="component noise" style="min-width:90px; padding:0.7rem 1rem;">
+                <div class="component-label" style="font-size:0.85rem;">z<sub>t</sub></div>
+                <div class="component-detail">noisy latent</div>
+            </div>
+            <span class="big-arrow">→</span>
+            <div style="display:flex; flex-direction:column; align-items:center;">
+                <div class="component clip" style="min-width:100px; padding:0.4rem 0.7rem; margin-bottom:0.4rem;">
+                    <div class="component-detail" style="font-size:0.7rem;">CLIP text emb ↓</div>
+                </div>
+                <div class="component unet">
+                    <div class="component-label">U-Net</div>
+                    <div class="component-detail">predicts noise ε̂<br>cross-attn on text<br>+ timestep t</div>
+                </div>
+            </div>
+            <span class="big-arrow">→</span>
+            <div class="component scheduler">
+                <div class="component-label">Scheduler</div>
+                <div class="component-detail">z<sub>t</sub> → z<sub>t-1</sub><br>(DDPM / DDIM)</div>
+            </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-dim); padding:0 1rem;">
+            <div style="color:#6c757d;">
+                <strong>Training:</strong> single forward pass<br>
+                L = MSE(ε̂, ε) → backprop U-Net only
+            </div>
+            <div style="color:var(--scheduler);">
+                <strong>Inference:</strong> loop T→0<br>
+                ↻ repeat until z₀
+            </div>
+        </div>
+    </div>
+
+    <div class="connector-v"></div>
+
+    <!-- VAE Decoder -->
+    <div class="component vae-dec">
+        <div class="component-label">VAE Decoder</div>
+        <div class="component-detail">64×64×4 latent z₀ → 512×512×3 image</div>
+        <div class="component-detail" style="margin-top:0.2rem; font-style:italic; opacity:0.8;">inference only</div>
+    </div>
+
+</div>
+
+<div class="highlight-box" style="max-width:750px; margin:1.5rem auto;">
+    <strong>Data flow:</strong> The <span style="color:#6c757d; font-weight:bold;">VAE Encoder</span> (training only) 
+    produces the clean latent z₀ which gets noised to z<sub>t</sub> — the input to the U-Net.
+    CLIP text embeddings enter the U-Net via cross-attention (a separate input, not connected to the VAE).
+    At inference, z<sub>t</sub> starts as pure noise and the VAE Encoder is not used.
+</div>
+
+<!-- ============================================================ -->
+<h2>The Three Components</h2>
+
+<div class="info-grid">
+
+    <!-- CLIP -->
+    <div class="info-card">
+        <h3><span class="badge clip-b">1</span> CLIP Text Encoder</h3>
+        <ul>
+            <li>Frozen OpenAI CLIP ViT-L/14 text encoder</li>
+            <li>Tokenizes prompt → max 77 tokens</li>
+            <li>Outputs sequence of 768-dim embeddings</li>
+            <li>Fed to U-Net via <strong>cross-attention</strong> at multiple resolutions</li>
+            <li>Not trained during SD training — used as-is</li>
+        </ul>
+        <div class="formula">tokens = tokenizer(prompt)  # [1, 77]
+text_emb = text_encoder(tokens)  # [1, 77, 768]</div>
+    </div>
+
+    <!-- U-Net -->
+    <div class="info-card">
+        <h3><span class="badge unet-b">2</span> U-Net (Conditional)</h3>
+        <ul>
+            <li>Same encoder-bottleneck-decoder structure as basic U-Net</li>
+            <li>Operates on <strong>64×64×4 latents</strong> (not pixels)</li>
+            <li>~860M parameters</li>
+            <li><strong>Cross-attention</strong> layers inject text conditioning:<br>
+                Q = latent features, K/V = text embeddings</li>
+            <li>Time embedding via sinusoidal + MLP (same as before)</li>
+        </ul>
+        <div class="formula">noise_pred = unet(z_t, t, text_embeddings)
+# z_t: [1, 4, 64, 64], t: scalar, text: [1, 77, 768]</div>
+    </div>
+
+    <!-- VAE -->
+    <div class="info-card">
+        <h3><span class="badge vae-b">3</span> VAE (Encoder + Decoder)</h3>
+        <ul>
+            <li>Compresses 512×512×3 → 64×64×4 (8× spatial reduction)</li>
+            <li>Trained separately, frozen during diffusion training</li>
+            <li><strong>Encoder:</strong> used only during training (encode real images to latents)</li>
+            <li><strong>Decoder:</strong> used at inference (latents → pixels)</li>
+            <li>Scaling factor: latents are divided/multiplied by 0.18215</li>
+        </ul>
+        <div class="formula"># Training:
+latent = vae.encode(image).latent_dist.sample() * 0.18215
+
+# Inference:
+image = vae.decode(z_0 / 0.18215)</div>
+    </div>
+
+    <!-- CFG -->
+    <div class="info-card">
+        <h3><span class="badge cfg-b">+</span> Classifier-Free Guidance (CFG)</h3>
+        <ul>
+            <li>At each step, run U-Net <strong>twice:</strong><br>
+                once with text (conditional), once without (unconditional)</li>
+            <li>Interpolate to amplify the text influence:</li>
+        </ul>
+        <div class="formula">ε = ε_uncond + guidance_scale × (ε_cond − ε_uncond)</div>
+        <ul>
+            <li><strong>scale = 1.0:</strong> no guidance (ignores text)</li>
+            <li><strong>scale = 7.5:</strong> standard (good balance)</li>
+            <li><strong>scale > 15:</strong> oversaturated, artifacts</li>
+        </ul>
+    </div>
+
+</div>
+
+<!-- ============================================================ -->
+<h2>Cross-Attention: How Text Guides the U-Net</h2>
+
+<div class="highlight-box">
+    The only difference from an unconditional U-Net is the addition of <strong>cross-attention</strong> layers.
+    In self-attention, Q/K/V all come from the image features. In cross-attention,
+    Q comes from the latent features but <strong>K and V come from the text embeddings</strong>.
+</div>
+
+<div class="flow-diagram" style="max-width:600px; margin:1rem auto;">
+Latent features (H·W × C)          Text embeddings (77 × 768)
+        │                                    │
+        ▼                                    ▼
+    Q = W_q · latent               K = W_k · text
+                                   V = W_v · text
+        │                                    │
+        └──────────────┬─────────────────────┘
+                       ▼
+        Attention = softmax(Q · Kᵀ / √d) · V
+                       │
+                       ▼
+              Text-guided features</div>
+
+<p class="section-intro" style="margin-top:1rem;">
+    This lets each spatial position in the latent "look at" the text tokens and decide
+    which words are relevant for that location. E.g., the top-left region might attend strongly
+    to "sky" while the bottom attends to "ground".
+</p>
+
+<!-- ============================================================ -->
+<h2>Key Numbers (SD 1.5)</h2>
+
+<div class="info-card" style="max-width:750px; margin:0 auto;">
+    <table class="cmp-table">
+        <tr><th>Parameter</th><th>Value</th></tr>
+        <tr><td>Total parameters</td><td>~1.06B (U-Net 860M + CLIP 123M + VAE 83M)</td></tr>
+        <tr><td>Image resolution</td><td>512 × 512</td></tr>
+        <tr><td>Latent resolution</td><td>64 × 64 × 4</td></tr>
+        <tr><td>Training timesteps</td><td>1000</td></tr>
+        <tr><td>Text encoder</td><td>CLIP ViT-L/14 (77 tokens, 768-dim)</td></tr>
+        <tr><td>Noise schedule</td><td>Scaled linear (β: 0.00085 → 0.012)</td></tr>
+    </table>
+</div>
+
+</body>
+</html>

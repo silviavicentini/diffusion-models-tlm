@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U-Net Architecture for 16×16 Sprites</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --card-bg: #16213e;
+            --accent: #0f3460;
+            --highlight: #e94560;
+            --text: #eaeaea;
+            --text-dim: #a0a0b0;
+            --encoder: #2d6a4f;
+            --decoder: #9b2226;
+            --bottleneck: #e76f51;
+            --skip: #f4a261;
+            --resblock: #264653;
+            --attn: #2a9d8f;
+            --time: #e9c46a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: var(--highlight);
+        }
+
+        h2 {
+            font-size: 1.4rem;
+            margin: 2rem 0 1rem;
+            padding-bottom: 0.3rem;
+            border-bottom: 2px solid var(--accent);
+        }
+
+        h3 {
+            font-size: 1.1rem;
+            margin: 1.5rem 0 0.5rem;
+            color: var(--text-dim);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-dim);
+            margin-bottom: 2rem;
+        }
+
+        .architecture {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 2rem 0;
+        }
+
+        .section-label {
+            font-weight: bold;
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding: 0.3rem 1rem;
+            border-radius: 4px;
+            margin: 0.5rem 0;
+        }
+
+        .section-label.encoder { background: var(--encoder); }
+        .section-label.decoder { background: var(--decoder); }
+        .section-label.bottleneck { background: var(--bottleneck); color: #1a1a2e; }
+
+        .level {
+            background: var(--card-bg);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            width: 100%;
+            max-width: 700px;
+        }
+
+        .level-title {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .blocks {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+            margin: 0.5rem 0;
+        }
+
+        .block {
+            padding: 0.4rem 0.7rem;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .block.res { background: var(--resblock); }
+        .block.attn { background: var(--attn); color: #1a1a2e; }
+        .block.down { background: var(--highlight); }
+        .block.up { background: #06d6a0; color: #1a1a2e; }
+        .block.time { background: var(--time); color: #1a1a2e; }
+        .block.norm { background: #6c757d; }
+        .block.conv { background: #495057; }
+
+        .arrow {
+            color: var(--text-dim);
+            font-size: 1.2rem;
+        }
+
+        .dims {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 0.3rem;
+            font-family: 'Consolas', monospace;
+        }
+
+        .skip-note {
+            font-size: 0.75rem;
+            color: var(--skip);
+            font-style: italic;
+            margin-top: 0.3rem;
+        }
+
+        .connector {
+            width: 2px;
+            height: 20px;
+            background: var(--text-dim);
+            margin: 0 auto;
+        }
+
+        .skip-connector {
+            width: 2px;
+            height: 20px;
+            background: var(--skip);
+            margin: 0 auto;
+            border-style: dashed;
+        }
+
+        /* Detail sections */
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        @media (max-width: 800px) {
+            .detail-grid { grid-template-columns: 1fr; }
+        }
+
+        .detail-card {
+            background: var(--card-bg);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 1.2rem;
+        }
+
+        .detail-card h3 {
+            margin-top: 0;
+            color: var(--text);
+        }
+
+        .flow {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.3rem;
+            font-family: 'Consolas', monospace;
+            font-size: 0.8rem;
+            margin-top: 0.8rem;
+        }
+
+        .flow-step {
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.05);
+            border-left: 3px solid var(--accent);
+        }
+
+        .flow-arrow {
+            color: var(--text-dim);
+            padding-left: 1rem;
+        }
+
+        .formula {
+            background: rgba(255,255,255,0.05);
+            padding: 0.8rem 1rem;
+            border-radius: 6px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+            margin: 0.5rem 0;
+            border-left: 3px solid var(--highlight);
+            overflow-x: auto;
+        }
+
+        .grid-visual {
+            font-family: monospace;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            background: rgba(0,0,0,0.3);
+            padding: 0.8rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+            margin: 1.5rem 0;
+            justify-content: center;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+        }
+
+        .legend-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+        }
+
+        .input-output {
+            text-align: center;
+            padding: 0.6rem 1rem;
+            background: var(--accent);
+            border-radius: 6px;
+            font-weight: bold;
+            max-width: 700px;
+            width: 100%;
+        }
+
+        .param-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+        }
+
+        .param-table th, .param-table td {
+            padding: 0.5rem 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid var(--accent);
+        }
+
+        .param-table th {
+            color: var(--highlight);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+<h1>U-Net Architecture for 16×16 Sprites</h1>
+<p class="subtitle">UNet2DModel from Diffusers — block_out_channels=(64, 128, 256)</p>
+
+<!-- Legend -->
+<div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--resblock)"></div> ResBlock (+t_emb)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--attn)"></div> Self-Attention</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--highlight)"></div> Downsample ↓2</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#06d6a0"></div> Upsample ↑2</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--time)"></div> Time embedding</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--skip); opacity:0.7"></div> Skip connections</div>
+</div>
+
+<!-- Main Architecture -->
+<div class="architecture">
+
+    <!-- Input -->
+    <div class="input-output">INPUT: noisy image x<sub>t</sub> (3ch, 16×16) + timestep t → sinusoidal embedding (256-dim)</div>
+
+    <div class="connector"></div>
+
+    <!-- ENCODER -->
+    <span class="section-label encoder">ENCODER</span>
+
+    <!-- Level 0 -->
+    <div class="level">
+        <div class="level-title">Level 0 — DownBlock2D</div>
+        <div class="blocks">
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block down">Conv ↓2</span>
+        </div>
+        <div class="dims">16×16×3 → 16×16×64 → 16×16×64 → <strong>8×8×64</strong></div>
+        <div class="skip-note">↗ skip connection (16×16×64) saved for decoder</div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Level 1 -->
+    <div class="level">
+        <div class="level-title">Level 1 — AttnDownBlock2D</div>
+        <div class="blocks">
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block attn">Attn</span>
+            <span class="arrow">→</span>
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block attn">Attn</span>
+            <span class="arrow">→</span>
+            <span class="block down">Conv ↓2</span>
+        </div>
+        <div class="dims">8×8×64 → 8×8×128 → 8×8×128 → <strong>4×4×128</strong></div>
+        <div class="skip-note">↗ skip connection (8×8×128) saved for decoder</div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Level 2 -->
+    <div class="level">
+        <div class="level-title">Level 2 — AttnDownBlock2D (no downsample)</div>
+        <div class="blocks">
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block attn">Attn</span>
+            <span class="arrow">→</span>
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block attn">Attn</span>
+        </div>
+        <div class="dims">4×4×128 → <strong>4×4×256</strong></div>
+        <div class="skip-note">↗ skip connection (4×4×256) saved for decoder</div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- BOTTLENECK -->
+    <span class="section-label bottleneck">BOTTLENECK</span>
+
+    <div class="level" style="border-color: var(--bottleneck);">
+        <div class="level-title">Mid Block</div>
+        <div class="blocks">
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block attn">Self-Attn</span>
+            <span class="arrow">→</span>
+            <span class="block res">ResBlock</span>
+        </div>
+        <div class="dims">4×4×256 → <strong>4×4×256</strong></div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- DECODER -->
+    <span class="section-label decoder">DECODER</span>
+
+    <!-- Decoder Level 0 -->
+    <div class="level">
+        <div class="level-title">Level 0 — AttnUpBlock2D</div>
+        <div class="skip-note">← concat skip_4 (4×4×256) → 4×4×512 input</div>
+        <div class="blocks">
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block attn">Attn</span>
+            <span class="arrow">→</span>
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block attn">Attn</span>
+            <span class="arrow">→</span>
+            <span class="block up">Upsample ↑2</span>
+        </div>
+        <div class="dims">4×4×(256+256) → 4×4×128 → <strong>8×8×128</strong></div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Decoder Level 1 -->
+    <div class="level">
+        <div class="level-title">Level 1 — AttnUpBlock2D</div>
+        <div class="skip-note">← concat skip_8 (8×8×128) → 8×8×256 input</div>
+        <div class="blocks">
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block attn">Attn</span>
+            <span class="arrow">→</span>
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block attn">Attn</span>
+            <span class="arrow">→</span>
+            <span class="block up">Upsample ↑2</span>
+        </div>
+        <div class="dims">8×8×(128+128) → 8×8×64 → <strong>16×16×64</strong></div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Decoder Level 2 -->
+    <div class="level">
+        <div class="level-title">Level 2 — UpBlock2D (no attention)</div>
+        <div class="skip-note">← concat skip_16 (16×16×64) → 16×16×128 input</div>
+        <div class="blocks">
+            <span class="block res">ResBlock</span>
+            <span class="arrow">→</span>
+            <span class="block res">ResBlock</span>
+        </div>
+        <div class="dims">16×16×(64+64) → <strong>16×16×64</strong></div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Output head -->
+    <div class="level" style="border-color: #6c757d;">
+        <div class="level-title">Output Head</div>
+        <div class="blocks">
+            <span class="block norm">GroupNorm</span>
+            <span class="arrow">→</span>
+            <span class="block norm">SiLU</span>
+            <span class="arrow">→</span>
+            <span class="block conv">Conv 1×1 (64→3)</span>
+        </div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Output -->
+    <div class="input-output">OUTPUT: predicted noise ε̂ (3ch, 16×16)</div>
+
+</div>
+
+<!-- Detail Cards -->
+<h2>Component Details</h2>
+
+<div class="detail-grid">
+
+    <!-- ResBlock -->
+    <div class="detail-card">
+        <h3>ResBlock</h3>
+        <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:0.8rem;">
+            Core building block. Processes features + injects time information.
+        </p>
+        <div class="flow">
+            <div class="flow-step">input (C_in × H × W)</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">GroupNorm → SiLU → Conv 3×3 (C_in → C_out)</div>
+            <div class="flow-arrow">↓ + t_emb (MLP: 256 → C_out, broadcast)</div>
+            <div class="flow-step">GroupNorm → SiLU → Conv 3×3 (C_out → C_out)</div>
+            <div class="flow-arrow">↓ + skip (Conv 1×1 if C_in ≠ C_out)</div>
+            <div class="flow-step">output (C_out × H × W)</div>
+        </div>
+    </div>
+
+    <!-- Self-Attention -->
+    <div class="detail-card">
+        <h3>Self-Attention</h3>
+        <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:0.8rem;">
+            Each pixel attends to all others. Captures global structure.
+        </p>
+        <div class="flow">
+            <div class="flow-step">input (C × H × W) → reshape to (H·W × C)</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">LayerNorm</div>
+            <div class="flow-arrow">↓ split into Q, K, V</div>
+            <div class="flow-step">Attention = softmax(Q·Kᵀ / √d) · V</div>
+            <div class="flow-arrow">↓ + residual</div>
+            <div class="flow-step">LayerNorm → MLP (Linear → GELU → Linear)</div>
+            <div class="flow-arrow">↓ + residual</div>
+            <div class="flow-step">reshape back to (C × H × W)</div>
+        </div>
+    </div>
+
+    <!-- Upsample -->
+    <div class="detail-card">
+        <h3>Upsample ↑2</h3>
+        <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:0.8rem;">
+            Nearest-neighbor interpolation + learned refinement.
+        </p>
+        <div class="grid-visual">4×4 input:     After nearest ×2:    After Conv 3×3:
+┌───┬───┐       ┌───┬───┬───┬───┐   ┌───┬───┬───┬───┐
+│ A │ B │       │ A │ A │ B │ B │   │ a │ b │ c │ d │
+├───┼───┤  →    ├───┼───┼───┼───┤ → ├───┼───┼───┼───┤
+│ C │ D │       │ A │ A │ B │ B │   │ e │ f │ g │ h │
+└───┴───┘       ├───┼───┼───┼───┤   ├───┼───┼───┼───┤
+                │ C │ C │ D │ D │   │ i │ j │ k │ l │
+                ├───┼───┼───┼───┤   ├───┼───┼───┼───┤
+                │ C │ C │ D │ D │   │ m │ n │ o │ p │
+                └───┴───┴───┴───┘   └───┴───┴───┴───┘
+                 (dumb copy)         (learned refine)</div>
+    </div>
+
+    <!-- Downsample -->
+    <div class="detail-card">
+        <h3>Downsample ↓2</h3>
+        <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:0.8rem;">
+            Strided convolution — learned spatial compression.
+        </p>
+        <div class="formula">Conv2d(kernel=3, stride=2, padding=1)
+<br><br>Each output pixel sees a 3×3 window of the input,
+jumping by 2 pixels → halves spatial dimensions.
+<br><br>8×8 → 4×4 (or 16×16 → 8×8)</div>
+    </div>
+
+</div>
+
+<!-- Parameter Summary -->
+<h2>Parameter Summary</h2>
+<table class="param-table">
+    <tr><th>Component</th><th>Channels</th><th>Spatial</th><th>Notes</th></tr>
+    <tr><td>Input conv</td><td>3 → 64</td><td>16×16</td><td>Initial projection</td></tr>
+    <tr><td>Encoder L0</td><td>64</td><td>16→8</td><td>2 ResBlocks + ↓2</td></tr>
+    <tr><td>Encoder L1</td><td>128</td><td>8→4</td><td>2 ResBlocks + 2 Attn + ↓2</td></tr>
+    <tr><td>Encoder L2</td><td>256</td><td>4×4</td><td>2 ResBlocks + 2 Attn (no ↓)</td></tr>
+    <tr><td>Bottleneck</td><td>256</td><td>4×4</td><td>ResBlock + Attn + ResBlock</td></tr>
+    <tr><td>Decoder L0</td><td>256→128</td><td>4→8</td><td>+ skip, 2 ResBlocks + 2 Attn + ↑2</td></tr>
+    <tr><td>Decoder L1</td><td>128→64</td><td>8→16</td><td>+ skip, 2 ResBlocks + 2 Attn + ↑2</td></tr>
+    <tr><td>Decoder L2</td><td>64</td><td>16×16</td><td>+ skip, 2 ResBlocks</td></tr>
+    <tr><td>Output head</td><td>64 → 3</td><td>16×16</td><td>GN + SiLU + Conv 1×1</td></tr>
+</table>
+
+</body>
+</html>
